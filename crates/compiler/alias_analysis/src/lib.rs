@@ -116,11 +116,13 @@ where
         *target = *source;
     }
 
-    if debug() {
-        for (i, c) in (format!("{symbol:?}")).chars().take(25).enumerate() {
-            name_bytes[25 + i] = c as u8;
-        }
-    }
+    // TODO: is this because of me or a real bug?
+    // if debug() {
+    //     dbg!((symbol, name_bytes));
+    //     for (i, c) in (format!("{symbol:?}")).chars().take(25).enumerate() {
+    //         name_bytes[25 + i] = c as u8;
+    //     }
+    // }
 
     name_bytes
 }

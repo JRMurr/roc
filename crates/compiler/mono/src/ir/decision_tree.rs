@@ -636,7 +636,7 @@ fn test_for_pattern<'a>(pattern: &Pattern<'a>) -> Option<Test<'a>> {
             arity,
             element_layout: _,
             elements: _,
-            rest_named: _, 
+            rest_named: _,
         } => IsListLen {
             bound: match arity {
                 ListArity::Exact(_) => ListLenBound::Exact,
@@ -1550,6 +1550,7 @@ enum PathInstruction {
     NewType,
     TagIndex { index: u64, tag_id: TagIdIntType },
     ListIndex { index: ListIndex },
+    ListSlice { start: u64, end: u64 },
 }
 
 fn path_to_expr_help<'a>(
@@ -1625,7 +1626,6 @@ fn path_to_expr_help<'a>(
             }
 
             // TODO: Add path instruction for to call LowLevel::ListSublist when named rest param is used
-
             PathInstruction::ListIndex { index } => {
                 let list_sym = symbol;
 
@@ -1652,6 +1652,8 @@ fn path_to_expr_help<'a>(
                     _ => internal_error!("not a list"),
                 }
             }
+
+            PathInstruction::ListSlice { start, end } => todo!("list slice neeed"),
         }
     }
 

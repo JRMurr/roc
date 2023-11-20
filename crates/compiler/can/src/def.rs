@@ -2074,12 +2074,11 @@ fn pattern_to_vars_by_symbol(
         List {
             patterns, elem_var, ..
         } => {
-
             if let Some((_, Some(rest_symbol))) = patterns.opt_rest {
                 // NO-COMMIT: is this right?
                 vars_by_symbol.insert(rest_symbol, *elem_var);
             }
-            
+
             for pat in patterns.patterns.iter() {
                 pattern_to_vars_by_symbol(vars_by_symbol, &pat.value, *elem_var);
             }

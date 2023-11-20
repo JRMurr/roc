@@ -63,7 +63,7 @@ pub enum Pattern<'a> {
         arity: ListArity,
         element_layout: InLayout<'a>,
         elements: Vec<'a, Pattern<'a>>,
-        rest_named: Option<Symbol> // TOOD: if set ListArity needs to be slice, maybe add symbol there?
+        rest_named: Option<Symbol>, // TOOD: if set ListArity needs to be slice, maybe add symbol there?
     },
 }
 
@@ -1079,7 +1079,7 @@ fn from_can_pattern_help<'a>(
                 arity,
                 element_layout,
                 elements: mono_patterns,
-                rest_named
+                rest_named,
             })
         }
     }
@@ -1247,7 +1247,7 @@ fn store_pattern_help<'a>(
             arity,
             element_layout,
             elements,
-            rest_named: _ // TODO: ?
+            rest_named,
         } => {
             return store_list_pattern(
                 env,
@@ -1257,6 +1257,7 @@ fn store_pattern_help<'a>(
                 *arity,
                 *element_layout,
                 elements,
+                *rest_named,
                 stmt,
             )
         }
@@ -1405,12 +1406,14 @@ pub(crate) fn build_list_index_probe<'a>(
     let index_sym = env.unique_symbol();
 
     let (opt_len_store, opt_offset_store, index_store) = if list_index >= 0 {
+        // Indexing before the spread
         let index_expr = Expr::Literal(Literal::Int((list_index as i128).to_ne_bytes()));
 
         let index_store = (index_sym, usize_layout, index_expr);
 
         (None, None, index_store)
     } else {
+        // Indexing after the spread
         let len_sym = env.unique_symbol();
         let len_expr = Expr::Call(Call {
             call_type: CallType::LowLevel {
@@ -1446,6 +1449,64 @@ pub(crate) fn build_list_index_probe<'a>(
     (index_sym, stores)
 }
 
+/// Builds the sub list index + length
+#[must_use]
+fn build_list_slice_prob<'a>(
+    env: &mut Env<'a, '_>,
+    list_sym: Symbol,
+    list_arity: &ListArity,
+) -> (Symbol, Symbol, [Store<'a>; 4]) {
+    let usize_layout = Layout::usize(env.target_info);
+
+    let (before, after) = if let ListArity::Slice(before, after) = list_arity {
+        (*before, *after)
+    } else {
+        unreachable!("Can only slice when the list has a slice pattern")
+    };
+
+    //Slice(before=2, after=3)
+    // s t [a b c] w y z (start = 2, sub_len = 3, total = 8)
+
+    // start = head
+    // sub_len = List.len - (after + before)
+    //           8 - 3 - 2 = 3
+
+    let start_sym = env.unique_symbol();
+    let start_expr = Expr::Literal(Literal::Int((before as i128).to_ne_bytes()));
+
+    // TODO: better name...
+    let after_plus_before_sym = env.unique_symbol();
+    let after_plus_before_expr =
+        Expr::Literal(Literal::Int(((after + before) as i128).to_ne_bytes()));
+
+    let len_sym = env.unique_symbol();
+    let len_expr = Expr::Call(Call {
+        call_type: CallType::LowLevel {
+            op: LowLevel::ListLen,
+            update_mode: env.next_update_mode_id(),
+        },
+        arguments: env.arena.alloc([list_sym]),
+    });
+
+    let sub_len_sym = env.unique_symbol();
+    let sub_len_expr = Expr::Call(Call {
+        call_type: CallType::LowLevel {
+            op: LowLevel::NumSub,
+            update_mode: env.next_update_mode_id(),
+        },
+        arguments: env.arena.alloc([len_sym, after_plus_before_sym]),
+    });
+
+    let start_store = (start_sym, usize_layout, start_expr);
+    let len_store = (len_sym, usize_layout, len_expr);
+    let after_plus_store = (after_plus_before_sym, usize_layout, after_plus_before_expr);
+    let sub_len_store = (sub_len_sym, usize_layout, sub_len_expr);
+
+    let stores = [start_store, len_store, after_plus_store, sub_len_store];
+
+    (start_sym, sub_len_sym, stores)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn store_list_pattern<'a>(
     env: &mut Env<'a, '_>,
@@ -1455,11 +1516,14 @@ fn store_list_pattern<'a>(
     list_arity: ListArity,
     element_layout: InLayout<'a>,
     elements: &[Pattern<'a>],
+    rest_named: Option<Symbol>,
     mut stmt: Stmt<'a>,
 ) -> StorePattern<'a> {
     use Pattern::*;
 
     let mut is_productive = false;
+
+    dbg!((element_layout, list_sym, rest_named, list_arity, elements));
 
     for (index, element) in elements.iter().enumerate().rev() {
         let compute_element_load = |env: &mut Env<'a, '_>| {
@@ -1529,6 +1593,33 @@ fn store_list_pattern<'a>(
 
         stmt = store_loaded;
         for (sym, lay, expr) in needed_stores.rev() {
+            stmt = Stmt::Let(sym, expr, lay, env.arena.alloc(stmt));
+        }
+    }
+
+    // extract the "rest" portion of the list into a sublist
+    if let Some(rest_symbol) = rest_named {
+        let (start_sym, sub_len_sym, needed_stores) =
+            build_list_slice_prob(env, list_sym, &list_arity);
+
+        let sublist_load = Expr::Call(Call {
+            call_type: CallType::LowLevel {
+                op: LowLevel::ListSublist,
+                update_mode: env.next_update_mode_id(),
+            },
+            arguments: env.arena.alloc([list_sym, start_sym, sub_len_sym]),
+        });
+
+        is_productive = true;
+
+        stmt = Stmt::Let(
+            rest_symbol,
+            sublist_load,
+            element_layout,
+            env.arena.alloc(stmt),
+        );
+
+        for (sym, lay, expr) in needed_stores.into_iter().rev() {
             stmt = Stmt::Let(sym, expr, lay, env.arena.alloc(stmt));
         }
     }
