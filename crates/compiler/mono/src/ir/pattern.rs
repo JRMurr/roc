@@ -63,6 +63,7 @@ pub enum Pattern<'a> {
         arity: ListArity,
         element_layout: InLayout<'a>,
         elements: Vec<'a, Pattern<'a>>,
+        rest_named: Option<Symbol> // TOOD: if set ListArity needs to be slice, maybe add symbol there?
     },
 }
 
@@ -1064,6 +1065,7 @@ fn from_can_pattern_help<'a>(
 
             let arity = patterns.arity();
 
+            // NO-COMMIT TODO: skipping rest here?
             let mut mono_patterns = Vec::with_capacity_in(patterns.patterns.len(), env.arena);
             for loc_pat in patterns.patterns.iter() {
                 let mono_pat =
@@ -1071,10 +1073,13 @@ fn from_can_pattern_help<'a>(
                 mono_patterns.push(mono_pat);
             }
 
+            let rest_named = patterns.opt_rest.and_then(|(_, maybe_sym)| maybe_sym);
+
             Ok(Pattern::List {
                 arity,
                 element_layout,
                 elements: mono_patterns,
+                rest_named
             })
         }
     }
@@ -1242,6 +1247,7 @@ fn store_pattern_help<'a>(
             arity,
             element_layout,
             elements,
+            rest_named: _ // TODO: ?
         } => {
             return store_list_pattern(
                 env,
@@ -1461,6 +1467,7 @@ fn store_list_pattern<'a>(
 
             let (index_sym, needed_stores) = build_list_index_probe(env, list_sym, &list_index);
 
+            // TOOD: code gen for rest?
             let load = Expr::Call(Call {
                 call_type: CallType::LowLevel {
                     op: LowLevel::ListGetUnsafe,

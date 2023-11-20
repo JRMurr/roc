@@ -636,6 +636,7 @@ fn test_for_pattern<'a>(pattern: &Pattern<'a>) -> Option<Test<'a>> {
             arity,
             element_layout: _,
             elements: _,
+            rest_named: _, 
         } => IsListLen {
             bound: match arity {
                 ListArity::Exact(_) => ListLenBound::Exact,
@@ -905,10 +906,12 @@ fn to_relevant_branch_help<'a>(
             _ => None,
         },
 
+        // NO-COMMIT: missing the code gen for rest?
         List {
             arity: my_arity,
             elements,
             element_layout: _,
+            rest_named: _,
         } => match test {
             IsListLen {
                 bound: test_bound,
@@ -1620,6 +1623,8 @@ fn path_to_expr_help<'a>(
                     }
                 }
             }
+
+            // TODO: Add path instruction for to call LowLevel::ListSublist when named rest param is used
 
             PathInstruction::ListIndex { index } => {
                 let list_sym = symbol;

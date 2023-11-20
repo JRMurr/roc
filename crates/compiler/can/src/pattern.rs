@@ -854,7 +854,7 @@ pub fn canonicalize_pattern<'a>(
                 loc_pattern.region,
                 permit_shadows,
             );
-
+            // NO-COMMIT TODO: is this the missing ingreident...
             match canonicalize_pattern_symbol(
                 env,
                 scope,
@@ -959,6 +959,7 @@ impl<'a> BindingsFromPattern<'a> {
                         } => {
                             return Some((*symbol, loc_pattern.region));
                         }
+                        // NO-COMMIT TODO: need to push an as on the stack?
                         As(pattern, symbol) => {
                             stack.push(Pattern(pattern));
                             return Some((*symbol, loc_pattern.region));

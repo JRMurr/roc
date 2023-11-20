@@ -600,6 +600,7 @@ pub fn walk_pattern<V: Visitor>(visitor: &mut V, pattern: &Pattern) {
         List {
             patterns, elem_var, ..
         } => patterns
+        // NO-COMMIT TODO: skipping rest pattern? Might be fine
             .patterns
             .iter()
             .for_each(|p| visitor.visit_pattern(&p.value, p.region, Some(*elem_var))),
